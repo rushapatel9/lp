@@ -1,0 +1,88 @@
+#include <iostream>
+#include <vector>
+#include <queue>
+#include <chrono>
+#include <omp.h>
+using namespace std;
+using namespace chrono;
+
+class TreeNode {
+public:
+    int val;
+    TreeNode *left, *right;
+    TreeNode(int x) : val(x), left(nullptr), right(nullptr) {}
+};
+
+// Parallel BFS on the tree
+void par_bfs(TreeNode* root) {
+    if (root == nullptr) return;
+    
+    queue<TreeNode*> q;
+    q.push(root);
+    cout << "Parallel BFS: " << root->val << " → ";
+    
+    // Process nodes level by level in parallel
+    while (!q.empty()) {
+        int level_size = q.size();
+        
+        #pragma omp parallel for
+        for (int i = 0; i < level_size; i++) {
+            TreeNode* node = q.front(); q.pop();
+            
+            cout << node->val << " → ";
+            
+            // Push left and right children of the current node to the queue
+            if (node->left) q.push(node->left);
+            if (node->right) q.push(node->right);
+        }
+    }
+    cout << endl;
+}
+
+// Parallel DFS on the tree (using sections for parallel execution)
+void par_dfs(TreeNode* root) {
+    if (root == nullptr) return;
+    
+    cout << "Parallel DFS: " << root->val << " → ";
+    
+    #pragma omp parallel sections
+    {
+        #pragma omp section
+        if (root->left) {
+            cout << root->left->val << " → ";
+            par_dfs(root->left);
+        }
+
+        #pragma omp section
+        if (root->right) {
+            cout << root->right->val << " → ";
+            par_dfs(root->right);
+        }
+    }
+    cout << endl;
+}
+
+int main() {
+    // Construct a simple binary tree
+    TreeNode* root = new TreeNode(1);
+    root->left = new TreeNode(2);
+    root->right = new TreeNode(3);
+    root->left->left = new TreeNode(4);
+    root->left->right = new TreeNode(5);
+    root->right->left = new TreeNode(6);
+    root->right->right = new TreeNode(7);
+    
+    // Measure execution time for Parallel BFS
+    auto t1 = high_resolution_clock::now();
+    par_bfs(root);
+    auto t2 = high_resolution_clock::now();
+    cout << "Execution time for Parallel BFS: " << duration_cast<microseconds>(t2 - t1).count() << " microseconds\n";
+    
+    // Measure execution time for Parallel DFS
+    auto t3 = high_resolution_clock::now();
+    par_dfs(root);
+    auto t4 = high_resolution_clock::now();
+    cout << "Execution time for Parallel DFS: " << duration_cast<microseconds>(t4 - t3).count() << " microseconds\n";
+    
+    return 0;
+}
