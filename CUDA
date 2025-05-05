@@ -1,0 +1,53 @@
+#include <iostream>
+#include <cuda_runtime.h>
+
+__global__ void addVectors(int* A, int* B, int* C, int n) {
+  int i = threadIdx.x + blockIdx.x * blockDim.x;
+  if (i < n) C[i] = A[i] + B[i];
+}
+
+__global__ void matmul(int* A, int* B, int* C, int N) {
+  int row = threadIdx.y + blockIdx.y * blockDim.y;
+  int col = threadIdx.x + blockIdx.x * blockDim.x;
+  if (row < N && col < N) {
+    int sum = 0;
+    for (int k = 0; k < N; k++) sum += A[row * N + k] * B[k * N + col];
+    C[row * N + col] = sum;
+  }
+}
+
+int main() {
+  // Vector Addition
+  int n = 1000, *A, *B, *C;
+  cudaMallocManaged(&A, n * sizeof(int));
+  cudaMallocManaged(&B, n * sizeof(int));
+  cudaMallocManaged(&C, n * sizeof(int));
+  for (int i = 0; i < n; i++) { A[i] = i; B[i] = i * 2; }
+
+  addVectors<<<(n + 255)/256, 256>>>(A, B, C, n);
+  cudaDeviceSynchronize();
+
+  std::cout << "Vector Addition (first 10): ";
+  for (int i = 0; i < 10; i++) std::cout << C[i] << " ";
+  std::cout << "\n";
+
+  cudaFree(A); cudaFree(B); cudaFree(C);
+
+  // Matrix Multiplication
+  int N = 32, *M1, *M2, *M3;
+  cudaMallocManaged(&M1, N*N*sizeof(int));
+  cudaMallocManaged(&M2, N*N*sizeof(int));
+  cudaMallocManaged(&M3, N*N*sizeof(int));
+  for (int i = 0; i < N*N; i++) { M1[i] = i; M2[i] = i; }
+
+  dim3 threads(16, 16), blocks((N+15)/16, (N+15)/16);
+  matmul<<<blocks, threads>>>(M1, M2, M3, N);
+  cudaDeviceSynchronize();
+
+  std::cout << "Matrix Multiplication (top 10 of first row): ";
+  for (int i = 0; i < 10; i++) std::cout << M3[i] << " ";
+  std::cout << "\n";
+
+  cudaFree(M1); cudaFree(M2); cudaFree(M3);
+  return 0;
+}
