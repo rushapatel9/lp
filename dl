@@ -121,61 +121,109 @@ plt.title("Confusion Matrix")
 plt.show()
 
 #3
-# Importing the libraries
-import numpy as np #allow to make arrays
-import matplotlib.pyplot as plt #visualize results on charts
-import pandas as pd #import dataset and manage easily
-dataset_train = pd.read_csv('/content/drive/MyDrive/Colab Notebooks/Google_Stock_Price_Train.csv')
-training_set = dataset_train.iloc[:, 1:2].values
-training_set.shape
+# Install yfinance library to fetch stock data programmatically
+!pip install yfinance
+
+# Import required libraries
+import yfinance as yf
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+
+#new cell
+# Download Google stock data for training (2012-2017)
+data = yf.download('GOOG', start='2012-01-01', end='2017-12-31')
+
+# Use only the 'Open' column for prediction
+dataset_train = data[['Open']]
+training_set = dataset_train.values
+
+#new cell
+# Normalize the stock prices to a range between 0 and 1
 from sklearn.preprocessing import MinMaxScaler
-sc = MinMaxScaler(feature_range = (0, 1))
+sc = MinMaxScaler(feature_range=(0, 1))
 training_set_scaled = sc.fit_transform(training_set)
+
+# Create data structure with 60 timesteps and 1 output
 X_train = []
 y_train = []
-for i in range(60, 1257): # upper bound is number of values
-    X_train.append(training_set_scaled[i-60:i, 0]) #takes 60 previous stock prices from 60 past stock prices
-    y_train.append(training_set_scaled[i, 0]) #contains stock price learned to predict
+for i in range(60, len(training_set)):
+    X_train.append(training_set_scaled[i-60:i, 0])  # 60 previous stock prices
+    y_train.append(training_set_scaled[i, 0])       # price at time i to be predicted
+
+# Convert to NumPy arrays and reshape for LSTM input
 X_train, y_train = np.array(X_train), np.array(y_train)
-X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
+X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))  # [samples, timesteps, features]
+
+#new cell
 from keras.models import Sequential
-from keras.layers import Dense
-from keras.layers import LSTM
-from keras.layers import Dropout
-# Initialising the RNN
+from keras.layers import Dense, LSTM, Dropout
+
+# Initialize the RNN
 regressor = Sequential()
-regressor.add(LSTM(units = 50, return_sequences = True, input_shape = (X_train.shape[1], 1)))
+
+# Add 4 LSTM layers with dropout to prevent overfitting
+regressor.add(LSTM(units=50, return_sequences=True, input_shape=(X_train.shape[1], 1)))
 regressor.add(Dropout(0.2))
-regressor.add(LSTM(units = 50, return_sequences = True))
+
+regressor.add(LSTM(units=50, return_sequences=True))
 regressor.add(Dropout(0.2))
-regressor.add(LSTM(units = 50, return_sequences = True))
+
+regressor.add(LSTM(units=50, return_sequences=True))
 regressor.add(Dropout(0.2))
-regressor.add(LSTM(units = 50))
+
+regressor.add(LSTM(units=50))
 regressor.add(Dropout(0.2))
-regressor.add(Dense(units = 1))
-regressor.compile(optimizer = 'adam', loss = 'mean_squared_error')
-regressor.fit(X_train, y_train, epochs = 200, batch_size = 32)
-dataset_test = pd.read_csv('/content/drive/MyDrive/Colab Notebooks/Google_Stock_Price_Test.csv')
-real_stock_price = dataset_test.iloc[:, 1:2].values
-dataset_total = pd.concat((dataset_train['Open'], dataset_test['Open']), axis = 0)
+
+# Output layer
+regressor.add(Dense(units=1))
+
+# Compile the model
+regressor.compile(optimizer='adam', loss='mean_squared_error')
+
+#new cell
+# Train the model on the training data
+regressor.fit(X_train, y_train, epochs=20, batch_size=32)
+
+#newcell
+# Download test data for Google (Jan 2018 to Mar 2018)
+data_test = yf.download('GOOG', start='2018-01-01', end='2018-03-01')
+dataset_test = data_test[['Open']]
+real_stock_price = dataset_test.values
+
+# Combine train and test data for creating input sequences
+dataset_total = pd.concat((dataset_train['Open'], dataset_test['Open']), axis=0)
 inputs = dataset_total[len(dataset_total) - len(dataset_test) - 60:].values
-#getting input of each previous financial days
-inputs = inputs.reshape(-1,1)
+
+# Reshape and scale inputs
+inputs = inputs.reshape(-1, 1)
 inputs = sc.transform(inputs)
+
+#new cell
+# Create test sequences using 60 timesteps
 X_test = []
-for i in range(60, 80):
-   X_test.append(inputs[i-60:i, 0])
+for i in range(60, 60 + len(dataset_test)):
+    X_test.append(inputs[i-60:i, 0])
 X_test = np.array(X_test)
 X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
+
+#new cell
+# Predict stock prices using the trained RNN
 predicted_stock_price = regressor.predict(X_test)
+
+# Reverse the scaling to get actual predicted prices
 predicted_stock_price = sc.inverse_transform(predicted_stock_price)
-plt.plot(real_stock_price, color = 'red',label = 'Real Google Stock Price')
-plt.plot(predicted_stock_price, color = 'blue',label='Predicted Google Stock Price')
+
+# Plot real vs predicted prices
+plt.plot(real_stock_price, color='red', label='Real Google Stock Price')
+plt.plot(predicted_stock_price, color='blue', label='Predicted Google Stock Price')
 plt.title('Google Stock Price Prediction')
 plt.xlabel('Time')
 plt.ylabel('Google Stock Price')
 plt.legend()
 plt.show()
+
+
 
 
 #classification
